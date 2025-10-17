@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truck Gas Logging System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .form-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        
+        .notes-section {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+        }
+        
+        .submit-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        .submit-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .submit-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        
+        .error {
+            color: #d32f2f;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .config-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <div class="config-warning">
+            <strong>⚠️ Setup Required:</strong> Please configure your Supabase credentials in the JavaScript section below before using this form.
+        </div>
+
+        <h1>⛽ Truck Gas Logging System</h1>
+        
+        <form id="gasLogForm">
+            <!-- Truck Selection -->
+            <div class="form-group">
+                <label for="truckSelect">Truck Number:</label>
+                <select id="truckSelect" name="truck" required>
+                    <option value="">Select a truck...</option>
+                    <option class="loading" value="">Loading trucks...</option>
+                </select>
+                <div id="truckError" class="error"></div>
+            </div>
+
+            <!-- Person Selection -->
+            <div class="form-group">
+                <label for="personSelect">Person Filling:</label>
+                <select id="personSelect" name="person" required>
+                    <option value="">Select person...</option>
+                    <option class="loading" value="">Loading personnel...</option>
+                </select>
+                <div id="personError" class="error"></div>
+            </div>
+
+            <!-- Gallons Filled -->
+            <div class="form-group">
+                <label for="gallons">Gallons Filled:</label>
+                <input type="number" id="gallons" name="gallons" step="0.01" min="0" max="999.99" required>
+                <div id="gallonsError" class="error"></div>
+            </div>
+
+            <!-- Truck Functioning Status -->
+            <div class="form-group">
+                <label>Truck Status:</label>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="truckFunctioning" name="truckFunctioning">
+                    <label for="truckFunctioning">Truck is functioning properly</label>
+                </div>
+                
+                <!-- Notes section (appears when truck is not functioning) -->
+                <div id="notesSection" class="notes-section">
+                    <label for="notes">Please describe any issues:</label>
+                    <textarea id="notes" name="notes" rows="4" placeholder="Describe any mechanical issues, warning lights, unusual sounds, etc."></textarea>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" class="submit-btn">Submit Gas Log</button>
+        </form>
+
+        <div id="successMessage" class="success">
+            Gas log submitted successfully! ✅
+        </div>
+    </div>
+
+    <!-- Supabase JavaScript Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        // SUPABASE CONFIGURATION - REPLACE WITH YOUR ACTUAL VALUES
+        const SUPABASE_CONFIG = {
+            url: 'YOUR_SUPABASE_URL', // e.g., 'https://abcdefghijklmnopqrst.supabase.co'
+            anonKey: 'YOUR_SUPABASE_ANON_KEY' // Your public anon key
+        };
+
+        // Initialize Supabase client
+        const supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+
+        // DOM Elements
+        const truckSelect = document.getElementById('truckSelect');
+        const personSelect = document.getElementById('personSelect');
+        const truckFunctioning = document.getElementById('truckFunctioning');
+        const notesSection = document.getElementById('notesSection');
+        const form = document.getElementById('gasLogForm');
+        const successMessage = document.getElementById('successMessage');
+
+        // Initialize the form when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTrucks();
+            loadPersonnel();
+            setupEventListeners();
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Toggle notes section based on truck functioning checkbox
+            truckFunctioning.addEventListener('change', function() {
+                if (this.checked) {
+                    notesSection.style.display = 'none';
+                    document.getElementById('notes').value = '';
+                } else {
+                    notesSection.style.display = 'block';
+                }
+            });
+
+            // Form submission
+            form.addEventListener('submit', handleFormSubmit);
+        }
+
+        // Load trucks from Supabase
+        async function loadTrucks() {
+            try {
+                const { data: trucks, error } = await supabase
+                    .from('trucks')
+                    .select('id, truck_number, model')
+                    .eq('active', true)
+                    .order('truck_number');
+
+                if (error) {
+                    console.error('Supabase error loading trucks:', error);
+                    // Fall back to mock data for development
+                    const mockTrucks = [
+                        { id: 1, truck_number: 'T001', model: 'Ford F-250' },
+                        { id: 2, truck_number: 'T002', model: 'Chevy Silverado' },
+                        { id: 3, truck_number: 'T003', model: 'Ram 2500' },
+                        { id: 4, truck_number: 'T004', model: 'Ford F-350' }
+                    ];
+                    populateTruckSelect(mockTrucks);
+                    return;
+                }
+
+                populateTruckSelect(trucks);
+            } catch (error) {
+                console.error('Error loading trucks:', error);
+                showError('truckError', 'Failed to load trucks. Please check your connection.');
+            }
+        }
+
+        // Load personnel from Supabase
+        async function loadPersonnel() {
+            try {
+                const { data: personnel, error } = await supabase
+                    .from('personnel')
+                    .select('id, first_name, last_name')
+                    .eq('active', true)
+                    .order('last_name');
+
+                if (error) {
+                    console.error('Supabase error loading personnel:', error);
+                    // Fall back to mock data for development
+                    const mockPersonnel = [
+                        { id: 1, first_name: 'John', last_name: 'Smith' },
+                        { id: 2, first_name: 'Maria', last_name: 'Garcia' },
+                        { id: 3, first_name: 'David', last_name: 'Johnson' },
+                        { id: 4, first_name: 'Sarah', last_name: 'Wilson' },
+                        { id: 5, first_name: 'Michael', last_name: 'Brown' }
+                    ];
+                    populatePersonnelSelect(mockPersonnel);
+                    return;
+                }
+
+                populatePersonnelSelect(personnel);
+            } catch (error) {
+                console.error('Error loading personnel:', error);
+                showError('personError', 'Failed to load personnel. Please check your connection.');
+            }
+        }
+
+        // Populate truck select dropdown
+        function populateTruckSelect(trucks) {
+            truckSelect.innerHTML = '';
+            
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = 'Select a truck...';
+            truckSelect.appendChild(placeholderOption);
+            
+            trucks.forEach(truck => {
+                const option = document.createElement('option');
+                option.value = truck.id;
+                option.textContent = `${truck.truck_number} - ${truck.model || ''}`;
+                truckSelect.appendChild(option);
+            });
+        }
+
+        // Populate personnel select dropdown
+        function populatePersonnelSelect(personnel) {
+            personSelect.innerHTML = '';
+            
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = 'Select person...';
+            personSelect.appendChild(placeholderOption);
+            
+            personnel.forEach(person => {
+                const option = document.createElement('option');
+                option.value = person.id;
+                option.textContent = `${person.first_name} ${person.last_name}`;
+                personSelect.appendChild(option);
+            });
+        }
+
+        // Show error message
+        function showError(elementId, message) {
+            const errorElement = document.getElementById(elementId);
+            errorElement.textContent = message;
+        }
+
+        // Clear all error messages
+        function clearErrors() {
+            document.querySelectorAll('.error').forEach(error => {
+                error.textContent = '';
+            });
+        }
+
+        // Handle form submission
+        async function handleFormSubmit(event) {
+            event.preventDefault();
+            clearErrors();
+
+            // Collect form data
+            const formData = {
+                truck_id: parseInt(document.getElementById('truckSelect').value),
+                person_id: parseInt(document.getElementById('personSelect').value),
+                gallons_filled: parseFloat(document.getElementById('gallons').value),
+                truck_functioning: document.getElementById('truckFunctioning').checked,
+                notes: document.getElementById('notes').value || null,
+                created_at: new Date().toISOString()
+            };
+
+            // Validate form
+            if (!validateForm(formData)) {
+                return;
+            }
+
+            try {
+                // Disable submit button during submission
+                const submitBtn = form.querySelector('.submit-btn');
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+
+                // Submit to Supabase
+                const { data, error } = await supabase
+                    .from('gas_logs')
+                    .insert([formData])
+                    .select();
+
+                if (error) {
+                    console.error('Supabase error:', error);
+                    throw new Error(`Database error: ${error.message}`);
+                }
+
+                console.log('Gas log submitted successfully:', data);
+                
+                // Show success message
+                successMessage.style.display = 'block';
+                
+                // Reset form
+                form.reset();
+                notesSection.style.display = 'none';
+                
+                // Hide success message after 5 seconds
+                setTimeout(() => {
+                    successMessage.style.display = 'none';
+                }, 5000);
+
+            } catch (error) {
+                console.error('Error submitting form:', error);
+                alert(`Failed to submit gas log: ${error.message}`);
+            } finally {
+                // Re-enable submit button
+                const submitBtn = form.querySelector('.submit-btn');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Gas Log';
+            }
+        }
+
+        // Form validation
+        function validateForm(data) {
+            let isValid = true;
+
+            if (!data.truck_id || isNaN(data.truck_id)) {
+                showError('truckError', 'Please select a truck');
+                isValid = false;
+            }
+
+            if (!data.person_id || isNaN(data.person_id)) {
+                showError('personError', 'Please select a person');
+                isValid = false;
+            }
+
+            if (!data.gallons_filled || data.gallons_filled <= 0) {
+                showError('gallonsError', 'Please enter a valid number of gallons');
+                isValid = false;
+            }
+
+            // If truck is not functioning, notes are required
+            if (!data.truck_functioning && (!data.notes || !data.notes.trim())) {
+                alert('Please describe the truck issues in the notes section');
+                isValid = false;
+            }
+
+            return isValid;
+        }
+    </script>
+</body>
+</html>
